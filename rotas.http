@@ -1,0 +1,4 @@
+
+POST  http://127.0.0.1:3000/usuarios
+Content-type: application/json
+# Content-type: application/json, avisa que o corpo da requisição está no formato JSON
