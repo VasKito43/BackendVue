@@ -76,3 +76,68 @@ server.put("/usuarios/:id", async (request, reply) => {
   }
 });
 
+
+
+// Listar produtos do estoque
+server.get("/estoque", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const produtos = await database.listEstoque(search);
+    return produtos;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar os produtos." });
+  }
+});
+
+// Criar um novo produto no estoque
+server.post("/estoque", async (request, reply) => {
+  const { nome, quantidade, imagem, valor } = request.body;
+
+  if (!nome || !quantidade || !imagem || !valor) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createEstoque({ nome, quantidade, imagem, valor });
+    return reply.status(201).send({ message: "Produto adicionado ao estoque!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao adicionar o produto." });
+  }
+});
+
+// Atualizar um produto no estoque
+server.put("/estoque/:id", async (request, reply) => {
+  const { id } = request.params;
+  const { nome, quantidade, imagem, valor } = request.body;
+
+  if (!id || !nome || !quantidade || !imagem || !valor) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.updateEstoque(id, { nome, quantidade, imagem, valor });
+    return reply.status(200).send({ message: "Produto atualizado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao atualizar o produto." });
+  }
+});
+
+// Deletar um produto do estoque
+server.delete("/estoque/:id", async (request, reply) => {
+  const { id } = request.params;
+
+  if (!id) {
+    return reply.status(400).send({ error: "ID do produto é obrigatório." });
+  }
+
+  try {
+    await database.deleteEstoque(id);
+    return reply.status(200).send({ message: "Produto removido do estoque!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao remover o produto." });
+  }
+});
