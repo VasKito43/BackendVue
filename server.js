@@ -38,6 +38,8 @@ server.post("/usuarios", async (request, reply) => {
   }
 });
 
+// USUARIOS ------------------------------------------------------------------------------
+
 server.listen({
   host: "0.0.0.0", // Configuração para render (pode ser ajustado para localhost)
   port: process.env.PORT ?? 3333, // Usando a porta configurada no arquivo .env
@@ -76,7 +78,7 @@ server.put("/usuarios/:id", async (request, reply) => {
   }
 });
 
-
+// ESTOQUE ------------------------------------------------------------------------------
 
 // Listar produtos do estoque
 server.get("/estoque", async (request, reply) => {
@@ -139,5 +141,120 @@ server.delete("/estoque/:id", async (request, reply) => {
   } catch (error) {
     console.error(error);
     return reply.status(500).send({ error: "Erro ao remover o produto." });
+  }
+});
+
+// VENDAS -----------------------------------------------------------------------
+
+// Listar vendas 
+server.get("/vendas", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const vendas = await database.listVendas(search);
+    return vendas;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar as vendas" });
+  }
+});
+
+// Criar uma nova venda
+server.post("/vendas", async (request, reply) => {
+  const { clienteId, estoqueId, quantidade, valorTotal, pedidoId } = request.body;
+
+  if (!clienteId || !estoqueId || !quantidade || !valorTotal || !pedidoId) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createVendas({ clienteId, estoqueId, quantidade, valorTotal, pedidoId });
+    return reply.status(201).send({ message: "Venda Criada!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao adicionar o venda." });
+  }
+});
+
+// Atualizar uma venda
+server.put("/vendas/:id", async (request, reply) => {
+  const { id } = request.params;
+  const { estoqueId, quantidade, valorTotal } = request.body;
+
+  if (!id || !estoqueId || !quantidade || !valorTotal ) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.updateVendas(id, { estoqueId, quantidade, valorTotal });
+    return reply.status(200).send({ message: "Venda atualizada com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao atualizar venda." });
+  }
+});
+
+// Deletar uma venda
+server.delete("/vendas/:id", async (request, reply) => {
+  const { id } = request.params;
+
+  if (!id) {
+    return reply.status(400).send({ error: "ID da venda é obrigatório." });
+  }
+
+  try {
+    await database.deleteVendas(id);
+    return reply.status(200).send({ message: "venda excluida!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao remover venda." });
+  }
+});
+
+//ESTOQUE -------------------------------------------------------------------------
+
+// Listar vendas 
+server.get("/pedidos", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const pedidos = await database.listPedidos(search);
+    return pedidos;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar de pedidos" });
+  }
+});
+
+// Criar um novo pedido
+server.post("/pedidos", async ( request,reply) => {
+  const id = request.body;
+
+  if (!id) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createVendas({ id });
+    return reply.status(201).send({ message: "Pedido Criado!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao adicionar pedido." });
+  }
+});
+
+// Atualizar um pedido
+server.put("/pedidos/:id", async (request, reply) => {
+  const { id } = request.params;
+  const { valor, estatus, formaPagamento } = request.body;
+
+  if (!id || !valor || !estatus || !formaPagamento ) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.updatePedidos(id, { valor, estatus, formaPagamento });
+    return reply.status(200).send({ message: "Pedido atualizada com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao atualizar pedido." });
   }
 });

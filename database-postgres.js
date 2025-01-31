@@ -77,8 +77,8 @@ export class DatabasePostgres {
 
     async createVendas(venda) {
       const vendaId = randomUUID();
-      const { clienteId, estoqueId, quantidade, valorTotal } = venda;
-      await sql`INSERT INTO vendas (id, cliente_id, estoque_id, quantidade, valor_total) VALUES (${vendaId}, ${clienteId}, ${estoqueId}, ${quantidade}, ${valorTotal})`;
+      const { clienteId, estoqueId, quantidade, valorTotal, pedidoId } = venda;
+      await sql`INSERT INTO vendas (id, cliente_id, estoque_id, quantidade, valor_total, pedido_id) VALUES (${vendaId}, ${clienteId}, ${estoqueId}, ${quantidade}, ${valorTotal}, ${pedidoId})`;
     }
 
     async updateVendas(id, venda) {
@@ -106,10 +106,63 @@ export class DatabasePostgres {
 
         await transaction`UPDATE estoque SET quantidade = ${novaQuantidadeEstoque} WHERE id = ${estoqueId}`;
 
+        await this.atualizaValorTotalPedido(vendaAntiga.pedido_id, transaction);
+
       })
     }
 
     async deleteVendas(id) {
-      await sql`DELETE FROM vendas WHERE id = ${id}`;
+      await sql.begin(async (transaction) => {
+        const venda = (await transaction`SELECT * FROM vendas WHERE id = ${id}`)[0];
+        if (!venda) {
+          throw new Error(`Venda com ID ${id} não encontrada.`);
+        }
+        await transaction`DELETE FROM vendas WHERE id = ${id}`;
+        await this.atualizaValorTotalPedido(venda.pedido_id, transaction);
+      })
     }
+
+
+    // tabela pedidos
+
+    async listPedidos(search) {
+      let pedidos;
+      if (search) {
+        pedidos = await sql`SELECT * FROM pedidos WHERE nome ILIKE ${'%' + search + '%'}`;
+      } else {
+        pedidos = await sql`SELECT * FROM pedidos`;
+      }
+      return pedidos;
+    }
+  
+    async createPedidos(id) {
+      const pedidoId = id;
+      const estatus = "pendente";
+      const valor  = 0;
+      await sql`INSERT INTO pedidos (id, valor, estatus, forma_pagamento) VALUES (${pedidoId}, ${valor}, ${estatus}, ${estatus})`;
+    }
+  
+    async updateEstoque(id, pedido) {
+      const { valor, estatus, formaPagamento } = pedido;
+      await sql`UPDATE pedidos SET valor = ${valor}, estatus = ${estatus}, forma_pagamento = ${formaPagamento} WHERE id = ${id}`;
+    }
+  
+    
+
+    async atualizaValorTotalPedido(pedidoId, transaction) {
+      const valoresPedido = await transaction`SELECT valor_total FROM vendas WHERE pedido_id = ${pedidoId}`;
+    
+      if (!valoresPedido || valoresPedido.length === 0) {
+        throw new Error(`Pedido com ID ${pedidoId} não encontrado.`);
+      }
+    
+      const valorTotalPedido = valoresPedido
+        .map(item => item.valor_total) // Mapeando os valores
+        .reduce((acumulador, valorAtual) => acumulador + valorAtual, 0); // Somando os valores
+    
+      await transaction`UPDATE pedidos SET valor = ${valorTotalPedido} WHERE id = ${pedidoId}`;
+    }
+
+    
+
 }
