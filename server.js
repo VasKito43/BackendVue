@@ -210,9 +210,9 @@ server.delete("/vendas/:id", async (request, reply) => {
   }
 });
 
-//ESTOQUE -------------------------------------------------------------------------
+//PEDIDO -------------------------------------------------------------------------
 
-// Listar vendas 
+// Listar pedido 
 server.get("/pedidos", async (request, reply) => {
   const { search } = request.query;
   try {
@@ -233,7 +233,7 @@ server.post("/pedidos", async ( request,reply) => {
   }
 
   try {
-    await database.createVendas({ id });
+    await database.createPedidos( id );
     return reply.status(201).send({ message: "Pedido Criado!" });
   } catch (error) {
     console.error(error);
