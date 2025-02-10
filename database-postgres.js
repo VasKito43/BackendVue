@@ -100,18 +100,18 @@ export class DatabasePostgres {
     });
     }
 
-    async updateVendas(id, venda) {
-      const { estoqueId, quantidade, valorTotal } = venda;
+    async updateVendas( venda) {
+      const { estoqueId, quantidade, valorTotal, pedidoId } = venda;
 
       await sql.begin(async (transaction) => {
-        const vendaAntiga = (await transaction`SELECT * FROM vendas WHERE id = ${id}`)[0];
+        const vendaAntiga = (await transaction`SELECT * FROM vendas WHERE estoque_id = ${estoqueId} AND pedido_id = ${pedidoId}`)[0];
         if (!vendaAntiga) {
-          throw new Error(`Venda com ID ${id} não encontrada.`);
+          throw new Error(`Venda  não encontrada.`);
         }
 
         const diferençaQuantidade = vendaAntiga.quantidade - quantidade;
 
-        await transaction`UPDATE vendas SET quantidade = ${quantidade}, valor_total = ${valorTotal} WHERE id = ${id}`;
+        await transaction`UPDATE vendas SET quantidade = ${quantidade}, valor_total = ${valorTotal} WHERE estoque_id = ${estoqueId} AND pedido_id = ${pedidoId}`;
 
         const produto = (await transaction`SELECT * FROM estoque WHERE id = ${estoqueId}`)[0];
         if (!produto) {
@@ -130,15 +130,33 @@ export class DatabasePostgres {
       })
     }
 
-    async deleteVendas(id) {
+    async deleteVendas(venda) {
+      const { estoqueId, quantidade, pedidoId } = venda;
+
       await sql.begin(async (transaction) => {
-        const venda = (await transaction`SELECT * FROM vendas WHERE id = ${id}`)[0];
-        if (!venda) {
-          throw new Error(`Venda com ID ${id} não encontrada.`);
+        const vendaAntiga = (await transaction`SELECT * FROM vendas WHERE estoque_id = ${estoqueId} AND pedido_id = ${pedidoId}`)[0];
+        if (!vendaAntiga) {
+          throw new Error(`Venda  não encontrada.`);
         }
-        await transaction`DELETE FROM vendas WHERE id = ${id}`;
-        await this.atualizaValorTotalPedido(venda.pedido_id, transaction);
+
+        await transaction`DELETE FROM vendas WHERE estoque_id = ${estoqueId} AND pedido_id = ${pedidoId}`;
+
+        const produto = (await transaction`SELECT * FROM estoque WHERE id = ${estoqueId}`)[0];
+        if (!produto) {
+          throw new Error(`Produto com ID ${estoqueId} não encontrado.`);
+        }
+        
+        const novaQuantidadeEstoque = produto.quantidade + quantidade;
+        if (novaQuantidadeEstoque < 0) {
+          throw new Error('Quantidade insuficiente no estoque.');
+        }
+
+        await transaction`UPDATE estoque SET quantidade = ${novaQuantidadeEstoque} WHERE id = ${estoqueId}`;
+
+        await this.atualizaValorTotalPedido(vendaAntiga.pedido_id, transaction);
+
       })
+
     }
 
 
@@ -173,17 +191,24 @@ export class DatabasePostgres {
           SELECT valor_total FROM vendas WHERE pedido_id = ${pedidoId}
       `;
   
-      if (!valoresPedido || valoresPedido.length === 0) {
+      if (!valoresPedido) {
           throw new Error(`Pedido com ID ${pedidoId} não encontrado.`);
       }
-  
-      const valorTotalPedido = valoresPedido
-          .map(item => parseFloat(item.valor_total) || 0) 
-          .reduce((acumulador, valorAtual) => acumulador + valorAtual, 0); 
-  
-      await transaction`
-          UPDATE pedidos SET valor = ${valorTotalPedido} WHERE id = ${pedidoId}
-      `;
+      
+      if (valoresPedido.length !== 0){
+        const valorTotalPedido = valoresPedido
+            .map(item => parseFloat(item.valor_total) || 0) 
+            .reduce((acumulador, valorAtual) => acumulador + valorAtual, 0); 
+    
+        await transaction`
+            UPDATE pedidos SET valor = ${valorTotalPedido} WHERE id = ${pedidoId}
+        `;
+        
+      }
+  }
+
+  async deletePedido(id) {
+    await sql`DELETE FROM pedidos WHERE id = ${id}`;
   }
   
 

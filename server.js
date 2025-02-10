@@ -176,16 +176,15 @@ server.post("/vendas", async (request, reply) => {
 });
 
 // Atualizar uma venda
-server.put("/vendas/:id", async (request, reply) => {
-  const { id } = request.params;
-  const { estoqueId, quantidade, valorTotal } = request.body;
+server.put("/vendas", async (request, reply) => {
+  const { estoqueId, quantidade, valorTotal, pedidoId } = request.body;
 
-  if (!id || !estoqueId || !quantidade || !valorTotal ) {
+  if ( !estoqueId || !quantidade || !valorTotal || !pedidoId ) {
     return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    await database.updateVendas(id, { estoqueId, quantidade, valorTotal });
+    await database.updateVendas({ estoqueId, quantidade, valorTotal, pedidoId });
     return reply.status(200).send({ message: "Venda atualizada com sucesso!" });
   } catch (error) {
     console.error(error);
@@ -194,15 +193,15 @@ server.put("/vendas/:id", async (request, reply) => {
 });
 
 // Deletar uma venda
-server.delete("/vendas/:id", async (request, reply) => {
-  const { id } = request.params;
+server.delete("/vendas", async (request, reply) => {
+  const { estoqueId, quantidade, pedidoId } = request.body;
 
-  if (!id) {
-    return reply.status(400).send({ error: "ID da venda é obrigatório." });
+  if (!estoqueId || !quantidade || !pedidoId) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    await database.deleteVendas(id);
+    await database.deleteVendas({estoqueId, quantidade, pedidoId});
     return reply.status(200).send({ message: "venda excluida!" });
   } catch (error) {
     console.error(error);
@@ -256,5 +255,22 @@ server.put("/pedidos/:id", async (request, reply) => {
   } catch (error) {
     console.error(error);
     return reply.status(500).send({ error: "Erro ao atualizar pedido." });
+  }
+});
+
+// Deletar um pedido
+server.delete("/pedidos/:id", async (request, reply) => {
+  const { id } = request.params;
+
+  if (!id) {
+    return reply.status(400).send({ error: "ID do pedido é obrigatório." });
+  }
+
+  try {
+    await database.deletePedido(id);
+    return reply.status(200).send({ message: "pedido excluido!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao remover o pedido." });
   }
 });
