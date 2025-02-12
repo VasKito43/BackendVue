@@ -274,3 +274,84 @@ server.delete("/pedidos/:id", async (request, reply) => {
     return reply.status(500).send({ error: "Erro ao remover o pedido." });
   }
 });
+
+//FUNCIONARIO -------------------------------------------------------------------------
+
+// Listar funcionario
+server.post("/validaFuncionarios", async (request, reply) => {
+  const { cpf, senha } = request.body;
+
+  if (!cpf || !senha ){
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+  try {
+    const funcionario = await database.listValidaFuncionarios(cpf, senha);
+    return reply.send(funcionario);
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao procurar funcionario" });
+  }
+});
+
+server.get("/funcionarios", async (reply) => {
+  try {
+    const funcionarios = await database.listFuncionarios();
+    return funcionarios;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar funcionarios." });
+  }
+});
+
+
+// Criar um novo funcionario
+server.post("/funcionarios", async (request, reply) => {
+  const { nome, telefone, cpf, senha } = request.body;
+
+  if (!nome || !telefone || !cpf || !senha) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createFuncionarios({ nome, telefone, cpf, senha });
+    return reply.status(201).send({ message: "Funcionário criado!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao criar funcionario" });
+  }
+});
+
+// Atualizar um funcionario
+server.put("/funcionarios/:id", async (request, reply) => {
+  const { id } = request.params;
+  const {  nome, telefone, senha  } = request.body;
+
+  if (!id || !nome || !telefone || !senha) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.updateFuncionarios(id, { nome, telefone, senha });
+    return reply.status(200).send({ message: "funcionario atualizado" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao atualizar ofuncionario." });
+  }
+});
+
+// Deletar um funcionario
+server.delete("/funcionario/:id", async (request, reply) => {
+  const { id } = request.params;
+
+  if (!id) {
+    return reply.status(400).send({ error: "ID não encontrado" });
+  }
+
+  try {
+    await database.deleteFuncionarios(id);
+    return reply.status(200).send({ message: "Funcionario excluido!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao excluir funcionario." });
+  }
+});

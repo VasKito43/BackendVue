@@ -210,8 +210,44 @@ export class DatabasePostgres {
   async deletePedido(id) {
     await sql`DELETE FROM pedidos WHERE id = ${id}`;
   }
+
+  // tabela funcionarios
+  async listValidaFuncionarios(cpf, senha) {
+    const [funcionario] = await sql`
+    SELECT * FROM funcionarios WHERE cpf = ${cpf}
+  `;
   
+  if (!funcionario) {
+    return { error: "Funcionário não encontrado" };
+  }
 
-    
+  if (funcionario.senha !== senha) {
+    return { error: "Senha incorreta" };
+  }
 
+  return funcionario;
+  }
+
+  async listFuncionarios() {
+    const funcionario = await sql`SELECT * FROM funcionarios`
+    return funcionario;
+  }
+
+  
+  async createFuncionarios(funcionario) {
+    const funcionarioId = randomUUID(); 
+    const { nome, telefone, cpf, senha } = funcionario;  
+    await sql`insert into funcionarios (id, nome, telefone, senha, cpf) VALUES (${funcionarioId}, ${nome}, ${telefone}, ${senha}, ${cpf})`;  
+  }
+
+  async updateFuncionarios(id, funcionario) {
+    const { nome, telefone, senha } = funcionario;
+  
+    await sql`update funcionarios set nome = ${nome}, telefone = ${telefone}, senha = ${senha} WHERE id = ${id}`; 
+  }
+
+  async deleteFuncionarios(id) {
+    await sql`delete from funcionarios where id = ${id}`;
+  }
 }
+
