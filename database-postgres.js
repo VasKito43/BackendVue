@@ -249,5 +249,227 @@ export class DatabasePostgres {
   async deleteFuncionarios(id) {
     await sql`delete from funcionarios where id = ${id}`;
   }
+
+
+
+
+
+//novo
+
+  async listValidaUsuario(cpf, senha) {
+  const [usuario] = await sql`
+  SELECT * FROM usuarios WHERE cpf = ${cpf}
+  `;
+
+  if (!usuario) {
+    return { error: "Funcionário não encontrado" };
+  }
+
+  if (usuario.senha !== senha) {
+    return { error: "Senha incorreta" };
+  }
+
+  return usuario;
+  }
+
+  async listProduto(search) {
+    let produtos;
+    if (search) {
+      produtos = await sql`SELECT * FROM produtos WHERE nome ILIKE ${'%' + search + '%'}`;
+    } else {
+      produtos = await sql`SELECT * FROM produtos`;
+    }
+    return produtos;
+  }
+
+  async recebeEntradas(search) {
+  let entradas;
+  if (search) {
+    // busca por data exata
+    entradas = await sql`
+      SELECT
+        e.id,
+        e.quantidade,
+        e.data,
+        u.id   AS usuario_id,
+        u.nome AS usuario_nome,
+        p.id   AS produto_id,
+        p.nome AS produto_nome,
+        p.unidade
+      FROM entradas e
+      JOIN usuarios u ON e.usuario_id = u.id
+      JOIN produtos p ON e.produto_id = p.id
+      WHERE e.data = ${search}
+      ORDER BY e.data DESC
+    `;
+  } else {
+    // retorna todas as entradas
+    entradas = await sql`
+      SELECT
+        e.id,
+        e.quantidade,
+        e.data,
+        u.id   AS usuario_id,
+        u.nome AS usuario_nome,
+        p.id   AS produto_id,
+        p.nome AS produto_nome,
+        p.unidade
+      FROM entradas e
+      JOIN usuarios u ON e.usuario_id = u.id
+      JOIN produtos p ON e.produto_id = p.id
+      ORDER BY e.data DESC
+    `;
+  }
+  return entradas;
+}
+
+  async listVendedor(search) {
+    let vendedores;
+    if (search) {
+      vendedores = await sql`SELECT * FROM vendedores WHERE nome ILIKE ${'%' + search + '%'}`;
+    } else {
+      vendedores = await sql`SELECT * FROM vendedores`;
+    }
+    return vendedores;
+  }
+
+  async createEntrada(entrada) {
+    return await sql.begin(async (tx) => {
+      const data = new Date();
+      const { produtoId, quantidade, usuarioId } = entrada;
+  
+      // 1) Busca o produto
+      const result = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
+      const produto = result[0];
+      if (!produto) throw new Error('Produto não encontrado');
+  
+      // 2) Atualiza quantidade no produtos
+      const novaQuantidade = produto.quantidade + quantidade;
+      await tx`
+        UPDATE produtos
+        SET quantidade = ${novaQuantidade}
+        WHERE id = ${produtoId}
+      `;
+  
+      // 3) Insere na tabela de entradas (ID gerado pelo banco)
+      await tx`
+        INSERT INTO entradas (
+          usuario_id,
+          produto_id,
+          quantidade,
+          data
+        ) VALUES (
+          ${usuarioId},
+          ${produtoId},
+          ${quantidade},
+          ${data}
+        )
+      `;
+      // tx.commit() é automático se não houver erros
+    });
+  }
+
+  async recebeSaidas(search) {
+  let saidas;
+  if (search) {
+    // filtrar por data exata
+    saidas = await sql`
+      SELECT
+        s.id,
+        s.quantidade,
+        s.data,
+        u.id   AS usuario_id,
+        u.nome AS usuario_nome,
+        p.id   AS produto_id,
+        p.nome AS produto_nome,
+        v.id   AS vendedor_id,
+        v.nome AS vendedor_nome,
+        s.descrição
+      FROM saidas s
+      JOIN usuarios u ON s.usuario_id = u.id
+      JOIN produtos p ON s.produto_id = p.id
+      JOIN vendedores v ON s.vendedor_id = v.id
+      WHERE s.data = ${search}
+      ORDER BY s.data DESC
+    `;
+  } else {
+    // todas as saídas
+    saidas = await sql`
+      SELECT
+        s.id,
+        s.quantidade,
+        s.data,
+        u.id   AS usuario_id,
+        u.nome AS usuario_nome,
+        p.id   AS produto_id,
+        p.nome AS produto_nome,
+        v.id   AS vendedor_id,
+        v.nome AS vendedor_nome,
+        s.descrição
+      FROM saidas s
+      JOIN usuarios u ON s.usuario_id = u.id
+      JOIN produtos p ON s.produto_id = p.id
+      JOIN vendedores v ON s.vendedor_id = v.id
+      ORDER BY s.data DESC
+    `;
+  }
+  return saidas;
+}
+  
+  async createSaida(saida) {
+    return await sql.begin(async (tx) => {
+      const data = new Date();
+      const { usuarioId, produtoId, quantidade, valorTotal, desconto, valorFinal, vendedorId, descricao} = saida;
+  
+      // 1) Busca o produto
+      const result = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
+      const produto = result[0];
+      if (!produto) throw new Error('Produto não encontrado');
+  
+      // 2) Atualiza quantidade no produtos
+      const novaQuantidade = produto.quantidade - quantidade;
+      await tx`
+        UPDATE produtos
+        SET quantidade = ${novaQuantidade}
+        WHERE id = ${produtoId}
+      `;
+  
+      // 3) Insere na tabela de entradas (ID gerado pelo banco)
+      await tx`
+        INSERT INTO saidas (
+          usuario_id,
+          produto_id,
+          quantidade,
+          data,
+          vendedor_id,
+          descrição
+        ) VALUES (
+          ${usuarioId},
+          ${produtoId},
+          ${quantidade},
+          ${data},
+          ${vendedorId},
+          ${descricao}
+        )
+      `;
+      // tx.commit() é automático se não houver erros
+    });
+  }
+
+  async updateProdutos(id, venda) {
+      const { nome, quantidade } = venda;
+      await sql`UPDATE produtos SET nome = ${nome}, quantidade = ${quantidade} WHERE id = ${id}`;
+      
+    }
+  
+  async deleteProdutos(id) {
+      await sql`DELETE FROM produtos WHERE id = ${id}`;
+    }
+
+  async createProduto(venda) {
+      const vendaId = randomUUID();
+      const { nome, quantidade } = venda;
+      await sql`INSERT INTO produtos (id, nome, quantidade, unidade) VALUES (${vendaId}, ${nome}, ${quantidade}, ${'Unit.'})`;
+    }
 }
 

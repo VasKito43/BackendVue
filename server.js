@@ -355,3 +355,160 @@ server.delete("/funcionario/:id", async (request, reply) => {
     return reply.status(500).send({ error: "Erro ao excluir funcionario." });
   }
 });
+
+
+//novo
+
+server.post("/validaUsuario", async (request, reply) => {
+  const { cpf, senha } = request.body;
+
+  if (!cpf || !senha ){
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+  try {
+    const usuario = await database.listValidaUsuario(cpf, senha);
+    return reply.send(usuario);
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao procurar usuario" });
+  }
+});
+
+
+server.get("/produtos", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const produtos = await database.listProduto(search);
+    return produtos;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar os produtos." });
+  }
+});
+
+server.get("/recebeEntradas", async (request, reply) => {
+  // espera search no formato 'YYYY-MM-DD'
+  const { search } = request.query;
+  try {
+    const produtos = await database.recebeEntradas(search);
+    return produtos;
+  } catch (error) {
+    console.error(error);
+    return reply
+      .status(500)
+      .send({ error: "Erro ao listar os produtos." });
+  }
+});
+
+server.get('/recebeSaidas', async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const registros = await database.recebeSaidas(search);
+    reply.send(registros);
+  } catch (err) {
+    console.error(err);
+    reply.status(500).send({ error: 'Erro ao listar as saídas.' });
+  }
+});
+
+server.get("/vendedores", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const vendedores = await database.listVendedor(search);
+    return vendedores;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar os vendedores." });
+  }
+});
+
+// Criar um novo produto no estoque
+server.post("/realizarEntrada", async (request, reply) => {
+  const { produtoId, quantidade, usuarioId } = request.body;
+
+  if (!produtoId || !quantidade || !usuarioId ) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createEntrada({ produtoId, quantidade, usuarioId });
+    return reply.status(201).send({ message: "Entrada realizado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao realizar entrada" });
+  }
+});
+
+server.post("/realizarSaida", async (request, reply) => {
+  const { usuarioId, produtoId, quantidade, vendedorId, descricao} = request.body;
+
+  if (
+    usuarioId == null ||
+    produtoId == null ||
+    quantidade == null ||
+    vendedorId == null ||
+    typeof descricao !== 'string'
+  ) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createSaida({ usuarioId, produtoId, quantidade, vendedorId, descricao });
+    return reply.status(201).send({ message: "Saida realizado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao realizar saida" });
+  }
+});
+
+// Atualizar um produto no estoque
+server.put("/produtos/:id", async (request, reply) => {
+  const { id } = request.params;
+  const { nome, quantidade } = request.body;
+
+  if (!id || !nome || !quantidade) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.updateProdutos(id, { nome, quantidade });
+    return reply.status(200).send({ message: "Produto atualizado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao atualizar o produto." });
+  }
+});
+
+// Deletar um produto do estoque
+server.delete("/produtos/:id", async (request, reply) => {
+  const { id } = request.params;
+
+  if (!id) {
+    return reply.status(400).send({ error: "ID do produto é obrigatório." });
+  }
+
+  try {
+    await database.deleteProdutos(id);
+    return reply.status(200).send({ message: "Produto removido do estoque!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao remover o produto." });
+  }
+});
+
+// Criar um novo produto no estoque
+server.post("/produto", async (request, reply) => {
+  const { nome, quantidade } = request.body;
+
+  if (!nome || !quantidade) {
+    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  }
+
+  try {
+    await database.createProduto({ nome, quantidade });
+    return reply.status(201).send({ message: "Produto adicionado ao estoque!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao adicionar o produto." });
+  }
+});
