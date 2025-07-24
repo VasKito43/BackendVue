@@ -333,6 +333,26 @@ export class DatabasePostgres {
     return vendedores;
   }
 
+  async listClientes(search) {
+    let clientes;
+    if (search) {
+      clientes = await sql`SELECT * FROM clientes WHERE nome ILIKE ${'%' + search + '%'}`;
+    } else {
+      clientes = await sql`SELECT * FROM clientes`;
+    }
+    return clientes;
+  }
+
+  async listFormasPagamentos(search) {
+    let formas_pagamentos;
+    if (search) {
+      formas_pagamentos = await sql`SELECT * FROM formas_pagamentos WHERE nome ILIKE ${'%' + search + '%'}`;
+    } else {
+      formas_pagamentos = await sql`SELECT * FROM formas_pagamentos`;
+    }
+    return formas_pagamentos;
+  }
+
   async createEntrada(entrada) {
     return await sql.begin(async (tx) => {
       const data = new Date();
@@ -384,11 +404,19 @@ export class DatabasePostgres {
         p.nome AS produto_nome,
         v.id   AS vendedor_id,
         v.nome AS vendedor_nome,
+        c.id   AS cliente_id,
+        c.nome AS cliente_nome,
+        f.id   AS forma_pagamento_id,
+        f.nome AS forma_pagamento_nome,
+        s.valor_custo,
+        s.valor_venda,
         s.descrição
       FROM saidas s
-      JOIN usuarios u ON s.usuario_id = u.id
-      JOIN produtos p ON s.produto_id = p.id
-      JOIN vendedores v ON s.vendedor_id = v.id
+      JOIN usuarios u               ON s.usuario_id = u.id
+      JOIN produtos p               ON s.produto_id = p.id
+      JOIN vendedores v             ON s.vendedor_id = v.id
+      JOIN clientes c               ON s.id_cliente = c.id
+      JOIN formas_pagamentos f      ON s.id_forma_pagamento = f.id
       WHERE s.data = ${search}
       ORDER BY s.data DESC
     `;
@@ -405,56 +433,84 @@ export class DatabasePostgres {
         p.nome AS produto_nome,
         v.id   AS vendedor_id,
         v.nome AS vendedor_nome,
+        c.id   AS cliente_id,
+        c.nome AS cliente_nome,
+        f.id   AS forma_pagamento_id,
+        f.nome AS forma_pagamento_nome,
+        s.valor_custo,
+        s.valor_venda,
         s.descrição
       FROM saidas s
-      JOIN usuarios u ON s.usuario_id = u.id
-      JOIN produtos p ON s.produto_id = p.id
-      JOIN vendedores v ON s.vendedor_id = v.id
+      JOIN usuarios u               ON s.usuario_id = u.id
+      JOIN produtos p               ON s.produto_id = p.id
+      JOIN vendedores v             ON s.vendedor_id = v.id
+      JOIN clientes c               ON s.id_cliente = c.id
+      JOIN formas_pagamentos f      ON s.id_forma_pagamento = f.id
       ORDER BY s.data DESC
     `;
   }
   return saidas;
 }
+
   
-  async createSaida(saida) {
-    return await sql.begin(async (tx) => {
-      const data = new Date();
-      const { usuarioId, produtoId, quantidade, valorTotal, desconto, valorFinal, vendedorId, descricao} = saida;
-  
-      // 1) Busca o produto
-      const result = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
-      const produto = result[0];
-      if (!produto) throw new Error('Produto não encontrado');
-  
-      // 2) Atualiza quantidade no produtos
-      const novaQuantidade = produto.quantidade - quantidade;
-      await tx`
-        UPDATE produtos
-        SET quantidade = ${novaQuantidade}
-        WHERE id = ${produtoId}
-      `;
-  
-      // 3) Insere na tabela de entradas (ID gerado pelo banco)
-      await tx`
-        INSERT INTO saidas (
-          usuario_id,
-          produto_id,
-          quantidade,
-          data,
-          vendedor_id,
-          descrição
-        ) VALUES (
-          ${usuarioId},
-          ${produtoId},
-          ${quantidade},
-          ${data},
-          ${vendedorId},
-          ${descricao}
-        )
-      `;
-      // tx.commit() é automático se não houver erros
-    });
-  }
+  // --- database.js ---
+async createSaida(saida) {
+  return await sql.begin(async (tx) => {
+    const dataHoje = new Date();
+    const {
+      usuarioId,
+      produtoId,
+      quantidade,
+      vendedorId,
+      descricao,
+      valor_custo,
+      valor_venda,
+      id_cliente,
+      id_forma_pagamento
+    } = saida;
+
+    // 1) Busca o produto atual
+    const [produto] = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
+    if (!produto) throw new Error("Produto não encontrado");
+
+    // 2) Atualiza quantidade no estoque
+    const novaQuantidade = produto.quantidade - quantidade;
+    if (novaQuantidade < 0) throw new Error("Estoque insuficiente");
+    await tx`
+      UPDATE produtos
+      SET quantidade = ${novaQuantidade}
+      WHERE id = ${produtoId}
+    `;
+
+    // 3) Insere na tabela de saídas com todos os campos
+    await tx`
+      INSERT INTO saidas (
+        usuario_id,
+        produto_id,
+        quantidade,
+        data,
+        vendedor_id,
+        descrição,
+        valor_custo,
+        valor_venda,
+        id_cliente,
+        id_forma_pagamento
+      ) VALUES (
+        ${usuarioId},
+        ${produtoId},
+        ${quantidade},
+        ${dataHoje},
+        ${vendedorId},
+        ${descricao},
+        ${valor_custo},
+        ${valor_venda},
+        ${id_cliente},
+        ${id_forma_pagamento}
+      )
+    `;
+    // commit automático
+  });
+}
 
   async updateProdutos(id, venda) {
       const { nome, quantidade } = venda;
@@ -471,5 +527,58 @@ export class DatabasePostgres {
       const { nome, quantidade } = venda;
       await sql`INSERT INTO produtos (id, nome, quantidade, unidade) VALUES (${vendaId}, ${nome}, ${quantidade}, ${'Unit.'})`;
     }
+
+    async createCliente(cliente) {
+  const { nome } = cliente;
+  await sql`
+    INSERT INTO clientes (nome)
+    VALUES (${nome})
+  `;
+}
+
+async getLucrosTotais(opts) {
+  const {
+    vendedorId,
+    produtoId,
+    clienteId,
+    formaPagamentoId,
+    dataMin,
+    dataMax
+  } = opts;
+
+  // Monta o WHERE sem usar sql.join
+  const q = sql`
+    SELECT
+      COUNT(*)::int                                            AS num_vendas,
+      COALESCE(SUM(s.valor_venda * s.quantidade), 0)::numeric AS receita,
+      COALESCE(SUM(s.valor_custo  * s.quantidade), 0)::numeric AS custo
+    FROM saidas s
+    WHERE 1 = 1
+      ${vendedorId         ? sql` AND s.vendedor_id       = ${vendedorId}`         : sql``}
+      ${produtoId          ? sql` AND s.produto_id        = ${produtoId}`          : sql``}
+      ${clienteId != null  ? sql` AND s.id_cliente        = ${clienteId}`          : sql``}
+      ${formaPagamentoId!= null ? sql` AND s.id_forma_pagamento = ${formaPagamentoId}` : sql``}
+      ${dataMin            ? sql` AND s.data              >= ${dataMin}`            : sql``}
+      ${dataMax            ? sql` AND s.data              <= ${dataMax}`            : sql``}
+  `;
+
+  const row = (await q)[0] || {};
+  const receita = parseFloat(row.receita) || 0;
+  const custo   = parseFloat(row.custo)   || 0;
+
+  return {
+    numVendas: Number(row.num_vendas),
+    receita,
+    custo,
+    lucro: receita - custo
+  };
+}
+
+
+
+
+
+
+
 }
 

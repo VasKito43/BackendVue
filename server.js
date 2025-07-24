@@ -411,6 +411,7 @@ server.get('/recebeSaidas', async (request, reply) => {
   }
 });
 
+
 server.get("/vendedores", async (request, reply) => {
   const { search } = request.query;
   try {
@@ -419,6 +420,28 @@ server.get("/vendedores", async (request, reply) => {
   } catch (error) {
     console.error(error);
     return reply.status(500).send({ error: "Erro ao listar os vendedores." });
+  }
+});
+
+server.get("/clientes", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const clientes = await database.listClientes(search);
+    return clientes;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar os clientes." });
+  }
+});
+
+server.get("/formas_pagamentos", async (request, reply) => {
+  const { search } = request.query;
+  try {
+    const formas_pagamentos = await database.listFormasPagamentos(search);
+    return formas_pagamentos;
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao listar os formas_pagamentos." });
   }
 });
 
@@ -439,27 +462,59 @@ server.post("/realizarEntrada", async (request, reply) => {
   }
 });
 
+// --- routes.js (ou server.js) ---
 server.post("/realizarSaida", async (request, reply) => {
-  const { usuarioId, produtoId, quantidade, vendedorId, descricao} = request.body;
+  const {
+    usuarioId,
+    produtoId,
+    quantidade,
+    vendedorId,
+    descricao,
+    valor_custo,
+    valor_venda,
+    id_cliente,
+    id_forma_pagamento
+  } = request.body;
 
+  // validação básica de todos os campos
   if (
     usuarioId == null ||
     produtoId == null ||
     quantidade == null ||
     vendedorId == null ||
-    typeof descricao !== 'string'
+    valor_custo == null ||
+    valor_venda == null ||
+    id_cliente == null ||
+    id_forma_pagamento == null
   ) {
-    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+    return reply
+      .status(400)
+      .send({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    await database.createSaida({ usuarioId, produtoId, quantidade, vendedorId, descricao });
-    return reply.status(201).send({ message: "Saida realizado com sucesso!" });
+    await database.createSaida({
+      usuarioId,
+      produtoId,
+      quantidade,
+      vendedorId,
+      descricao,
+      valor_custo,
+      valor_venda,
+      id_cliente,
+      id_forma_pagamento
+    });
+    return reply
+      .status(201)
+      .send({ message: "Saída realizada com sucesso!" });
   } catch (error) {
     console.error(error);
-    return reply.status(500).send({ error: "Erro ao realizar saida" });
+    return reply
+      .status(500)
+      .send({ error: "Erro ao realizar saída" });
   }
 });
+
 
 // Atualizar um produto no estoque
 server.put("/produtos/:id", async (request, reply) => {
@@ -510,5 +565,64 @@ server.post("/produto", async (request, reply) => {
   } catch (error) {
     console.error(error);
     return reply.status(500).send({ error: "Erro ao adicionar o produto." });
+  }
+});
+
+server.post("/clientes", async (request, reply) => {
+  const { nome } = request.body;
+
+  if (!nome || nome.trim() === "") {
+    return reply.status(400).send({ error: "O nome é obrigatório." });
+  }
+
+  try {
+    await database.createCliente({ nome });
+    return reply.status(201).send({ message: "Cliente cadastrado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    return reply.status(500).send({ error: "Erro ao cadastrar o cliente." });
+  }
+});
+
+// server.js
+
+server.get('/lucros', async (request, reply) => {
+  const {
+    periodType,
+    periodValue,
+    vendedor: vendedorId,
+    produto: produtoId,
+    cliente: clienteId,
+    pagamento: formaPagamentoId
+  } = request.query;
+
+  let dataMin, dataMax;
+  if (periodType === 'month') {
+    const [y, m] = periodValue.split('-').map(Number);
+    dataMin = new Date(y, m - 1, 1);
+    dataMax = new Date(y, m, 0, 23, 59, 59);
+  } else {
+    const y = Number(periodValue);
+    dataMin = new Date(y, 0, 1);
+    dataMax = new Date(y, 11, 31, 23, 59, 59);
+  }
+
+  try {
+    const metrics = await database.getLucrosTotais({
+      vendedorId,
+      produtoId,
+      clienteId: clienteId ? Number(clienteId) : null,
+      formaPagamentoId: formaPagamentoId ? Number(formaPagamentoId) : null,
+      dataMin,
+      dataMax
+    });
+    return reply.send(metrics);
+  } catch (err) {
+    // log completo no servidor
+    request.log.error(err);
+    // retorna detalhe para o front (remova em produção)
+    return reply
+      .status(500)
+      .send({ error: 'Erro ao calcular lucros', details: err.message });
   }
 });
