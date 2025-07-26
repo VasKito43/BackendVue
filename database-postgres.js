@@ -354,40 +354,48 @@ export class DatabasePostgres {
   }
 
   async createEntrada(entrada) {
-    return await sql.begin(async (tx) => {
-      const data = new Date();
-      const { produtoId, quantidade, usuarioId } = entrada;
-  
-      // 1) Busca o produto
-      const result = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
-      const produto = result[0];
-      if (!produto) throw new Error('Produto não encontrado');
-  
-      // 2) Atualiza quantidade no produtos
-      const novaQuantidade = produto.quantidade + quantidade;
-      await tx`
-        UPDATE produtos
-        SET quantidade = ${novaQuantidade}
-        WHERE id = ${produtoId}
-      `;
-  
-      // 3) Insere na tabela de entradas (ID gerado pelo banco)
-      await tx`
-        INSERT INTO entradas (
-          usuario_id,
-          produto_id,
-          quantidade,
-          data
-        ) VALUES (
-          ${usuarioId},
-          ${produtoId},
-          ${quantidade},
-          ${data}
-        )
-      `;
-      // tx.commit() é automático se não houver erros
-    });
-  }
+  return await sql.begin(async (tx) => {
+    const data = new Date();
+    const { produtoId, quantidade, usuarioId, valor } = entrada;
+
+    // 1) Busca o produto
+    const [produto] = await tx`SELECT * FROM produtos WHERE id = ${produtoId}`;
+    if (!produto) throw new Error('Produto não encontrado');
+
+    // 2) Atualiza quantidade no produtos
+    const novaQuantidade = produto.quantidade + quantidade;
+    await tx`
+      UPDATE produtos
+      SET quantidade = ${novaQuantidade}
+      WHERE id = ${produtoId}
+    `;
+
+    // ─── Novo passo: atualiza também o valor unitário no produto ───
+    await tx`
+      UPDATE produtos
+      SET valor = ${valor}
+      WHERE id = ${produtoId}
+    `;
+
+    // 3) Insere na tabela de entradas (valor unitário incluído)
+    await tx`
+      INSERT INTO entradas (
+        usuario_id,
+        produto_id,
+        quantidade,
+        data,
+        valor
+      ) VALUES (
+        ${usuarioId},
+        ${produtoId},
+        ${quantidade},
+        ${data},
+        ${valor}
+      )
+    `;
+  });
+}
+
 
   async recebeSaidas(search) {
   let saidas;
@@ -514,7 +522,13 @@ async createSaida(saida) {
 
   async updateProdutos(id, venda) {
       const { nome, quantidade } = venda;
-      await sql`UPDATE produtos SET nome = ${nome}, quantidade = ${quantidade} WHERE id = ${id}`;
+      await sql`
+        UPDATE produtos
+        SET nome       = ${nome},
+            quantidade = ${quantidade},
+            valor      = ${venda.valor}            -- ← novo
+        WHERE id = ${id}
+      `;
       
     }
   
@@ -522,17 +536,30 @@ async createSaida(saida) {
       await sql`DELETE FROM produtos WHERE id = ${id}`;
     }
 
-  async createProduto(venda) {
-      const vendaId = randomUUID();
-      const { nome, quantidade } = venda;
-      await sql`INSERT INTO produtos (id, nome, quantidade, unidade) VALUES (${vendaId}, ${nome}, ${quantidade}, ${'Unit.'})`;
-    }
+  async createProduto(produto) {
+  const produtoId = randomUUID();
+  const { nome, quantidade, valor } = produto;
+  await sql`
+    INSERT INTO produtos (
+      id,
+      nome,
+      quantidade,
+      valor
+    ) VALUES (
+      ${produtoId},
+      ${nome},
+      ${quantidade},
+      ${valor}
+    )
+  `;
+}
+
 
     async createCliente(cliente) {
   const { nome } = cliente;
   await sql`
     INSERT INTO clientes (nome)
-    VALUES (${nome})
+    VALUES (${nome.toUpperCase()})
   `;
 }
 
@@ -575,8 +602,44 @@ async getLucrosTotais(opts) {
 }
 
 
+async listEntradas(search) {
+  // se tiver filtro de texto, monta WHERE; aqui simplifico sem search
+  const rows = await sql`
+    SELECT
+      e.id,
+      e.usuario_id,
+      u.nome AS usuario_nome,
+      e.produto_id,
+      p.nome AS produto_nome,
+      e.quantidade,
+      e.data,
+      e.valor        AS valor,               -- valor unitário
+      (e.quantidade * e.valor) AS total_entrada  -- total calculado
+    FROM entradas e
+    JOIN usuarios u    ON u.id = e.usuario_id
+    JOIN produtos p    ON p.id = e.produto_id
+    ORDER BY e.data DESC
+  `
+  return rows
+}
 
-
+async getFechamentoCaixa({ date, vendedorId }) {
+  const rows = await sql`
+    SELECT
+      fp.nome            AS forma_pagamento,
+      SUM(s.valor_venda * s.quantidade) AS total_recebido
+    FROM saidas s
+    JOIN formas_pagamentos fp
+      ON fp.id = s.id_forma_pagamento
+    WHERE s.data = ${date}
+      AND s.vendedor_id = ${vendedorId}
+    GROUP BY fp.nome
+  `
+  return rows.reduce((acc, r) => {
+    acc[r.forma_pagamento] = parseFloat(r.total_recebido) || 0
+    return acc
+  }, {})
+}
 
 
 

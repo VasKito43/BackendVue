@@ -386,19 +386,15 @@ server.get("/produtos", async (request, reply) => {
   }
 });
 
-server.get("/recebeEntradas", async (request, reply) => {
-  // espera search no formato 'YYYY-MM-DD'
-  const { search } = request.query;
+server.get('/recebeEntradas', async (request, reply) => {
   try {
-    const produtos = await database.recebeEntradas(search);
-    return produtos;
-  } catch (error) {
-    console.error(error);
-    return reply
-      .status(500)
-      .send({ error: "Erro ao listar os produtos." });
+    const entradas = await database.listEntradas()
+    return reply.send(entradas)
+  } catch (err) {
+    request.log.error(err)
+    return reply.status(500).send({ error: 'Erro ao listar entradas' })
   }
-});
+})
 
 server.get('/recebeSaidas', async (request, reply) => {
   const { search } = request.query;
@@ -447,20 +443,26 @@ server.get("/formas_pagamentos", async (request, reply) => {
 
 // Criar um novo produto no estoque
 server.post("/realizarEntrada", async (request, reply) => {
-  const { produtoId, quantidade, usuarioId } = request.body;
+  const { produtoId, quantidade, usuarioId, valor } = request.body;
 
-  if (!produtoId || !quantidade || !usuarioId ) {
+  if (
+    produtoId == null ||
+    quantidade == null ||
+    usuarioId == null ||
+    valor == null
+  ) {
     return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    await database.createEntrada({ produtoId, quantidade, usuarioId });
-    return reply.status(201).send({ message: "Entrada realizado com sucesso!" });
+    await database.createEntrada({ produtoId, quantidade, usuarioId, valor });
+    return reply.status(201).send({ message: "Entrada realizada com sucesso!" });
   } catch (error) {
-    console.error(error);
+    request.log.error(error);
     return reply.status(500).send({ error: "Erro ao realizar entrada" });
   }
 });
+
 
 // --- routes.js (ou server.js) ---
 server.post("/realizarSaida", async (request, reply) => {
@@ -519,14 +521,14 @@ server.post("/realizarSaida", async (request, reply) => {
 // Atualizar um produto no estoque
 server.put("/produtos/:id", async (request, reply) => {
   const { id } = request.params;
-  const { nome, quantidade } = request.body;
+  const { nome, quantidade, valor } = request.body;
 
-  if (!id || !nome || !quantidade) {
+  if (!id || !nome || quantidade == null || valor == null) {
     return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
   }
 
   try {
-    await database.updateProdutos(id, { nome, quantidade });
+    await database.updateProdutos(id, { nome, quantidade, valor  });
     return reply.status(200).send({ message: "Produto atualizado com sucesso!" });
   } catch (error) {
     console.error(error);
@@ -553,20 +555,19 @@ server.delete("/produtos/:id", async (request, reply) => {
 
 // Criar um novo produto no estoque
 server.post("/produto", async (request, reply) => {
-  const { nome, quantidade } = request.body;
-
-  if (!nome || !quantidade) {
-    return reply.status(400).send({ error: "Todos os campos são obrigatórios." });
+  const { nome, quantidade, valor } = request.body;
+  if (!nome || !quantidade || valor == null) {
+    return reply.status(400).send({ error: "Nome, quantidade e valor são obrigatórios." });
   }
-
   try {
-    await database.createProduto({ nome, quantidade });
+    await database.createProduto({ nome, quantidade, valor });
     return reply.status(201).send({ message: "Produto adicionado ao estoque!" });
   } catch (error) {
     console.error(error);
     return reply.status(500).send({ error: "Erro ao adicionar o produto." });
   }
 });
+
 
 server.post("/clientes", async (request, reply) => {
   const { nome } = request.body;
@@ -626,3 +627,26 @@ server.get('/lucros', async (request, reply) => {
       .send({ error: 'Erro ao calcular lucros', details: err.message });
   }
 });
+
+// abaixo das outras rotas, antes do server.listen:
+server.get('/fechamento', async (request, reply) => {
+  const { date, vendedor } = request.query
+  if (!date || !vendedor) {
+    return reply
+      .status(400)
+      .send({ error: 'Parâmetros date e vendedor são obrigatórios.' })
+  }
+
+  try {
+    const fechamento = await database.getFechamentoCaixa({
+      date,
+      vendedorId: vendedor
+    })
+    return reply.send(fechamento)
+  } catch (err) {
+    console.error(err)
+    return reply
+      .status(500)
+      .send({ error: 'Erro ao calcular fechamento de caixa.' })
+  }
+})
