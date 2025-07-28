@@ -1,22 +1,16 @@
 {
-  "name": "crud-mail",
-  "version": "1.0.0",
-  "main": "index.js",
-  "type": "module",
-  "scripts": {
-    "dev": "node --watch server.js",
-    "start": "node server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@fastify/cors": "^10.0.1",
-    "fastify": "^5.1.0",
-    "postgres": "^3.4.5"
-  },
+  "name": "meu-monorepo",
+  "private": true,           
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
   "devDependencies": {
-    "dotenv": "^16.4.7"
+    "concurrently": "^7.6.0"  
   },
-  "description": ""
+  "scripts": {
+    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm --workspace=backend run dev",
+    "dev:frontend": "npm --workspace=frontend run dev"
+  }
 }
