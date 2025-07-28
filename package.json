@@ -1,16 +1,17 @@
 {
   "name": "meu-monorepo",
-  "private": true,           
+  "version": "1.0.0",
+  "private": true,
   "workspaces": [
     "backend",
     "frontend"
   ],
-  "devDependencies": {
-    "concurrently": "^7.6.0"  
-  },
   "scripts": {
-    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "npm --workspace=backend run dev",
-    "dev:frontend": "npm --workspace=frontend run dev"
+    "postinstall": "npm run bootstrap",
+    "bootstrap": "npm --workspace backend install && npm --workspace frontend install",
+    "dev": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
   }
 }
