@@ -629,24 +629,23 @@ server.get('/lucros', async (request, reply) => {
 });
 
 // abaixo das outras rotas, antes do server.listen:
+// em server.js, logo após as outras rotas...
+// Fechamento de caixa
 server.get('/fechamento', async (request, reply) => {
   const { date, vendedor } = request.query
   if (!date || !vendedor) {
-    return reply
-      .status(400)
-      .send({ error: 'Parâmetros date e vendedor são obrigatórios.' })
+    return reply.status(400).send({ error: 'Parâmetros "date" e "vendedor" são obrigatórios.' })
   }
-
   try {
-    const fechamento = await database.getFechamentoCaixa({
+    const resultado = await database.fechamentoCaixa({
       date,
       vendedorId: vendedor
     })
-    return reply.send(fechamento)
+    return reply.send(resultado)
   } catch (err) {
     console.error(err)
-    return reply
-      .status(500)
-      .send({ error: 'Erro ao calcular fechamento de caixa.' })
+    return reply.status(500).send({ error: 'Erro ao calcular fechamento de caixa.' })
   }
 })
+
+

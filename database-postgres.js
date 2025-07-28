@@ -623,23 +623,33 @@ async listEntradas(search) {
   return rows
 }
 
-async getFechamentoCaixa({ date, vendedorId }) {
-  const rows = await sql`
-    SELECT
-      fp.nome            AS forma_pagamento,
-      SUM(s.valor_venda * s.quantidade) AS total_recebido
-    FROM saidas s
-    JOIN formas_pagamentos fp
-      ON fp.id = s.id_forma_pagamento
-    WHERE s.data = ${date}
-      AND s.vendedor_id = ${vendedorId}
-    GROUP BY fp.nome
-  `
-  return rows.reduce((acc, r) => {
-    acc[r.forma_pagamento] = parseFloat(r.total_recebido) || 0
-    return acc
-  }, {})
-}
+ async fechamentoCaixa({ date, vendedorId }) {
+    // date no formato YYYY-MM-DD
+    // lucro = SUM(valor_venda - valor_custo) * quantidade
+    const rows = await sql`
+      SELECT 
+        fp.nome             AS forma,
+        SUM(s.valor_venda * s.quantidade)      AS total,
+        SUM((s.valor_venda - s.valor_custo) * s.quantidade) AS lucro
+      FROM saidas s
+      JOIN formas_pagamentos fp ON s.id_forma_pagamento = fp.id
+      WHERE s.data = ${date} 
+        AND s.vendedor_id = ${vendedorId}
+      GROUP BY fp.nome
+    `
+    // soma totalGeral e lucroGeral
+    const totalGeral = rows.reduce((acc, r) => acc + parseFloat(r.total), 0)
+    const lucroGeral = rows.reduce((acc, r) => acc + parseFloat(r.lucro), 0)
+    // converte para objeto { forma: { total, lucro } }
+    const porForma = {}
+    for (const r of rows) {
+      porForma[r.forma] = {
+        total: parseFloat(r.total),
+        lucro: parseFloat(r.lucro)
+      }
+    }
+    return { valoresPorForma: porForma, totalGeral, lucroGeral }
+  }
 
 
 
