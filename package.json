@@ -1,17 +1,22 @@
 {
-  "name": "meu-monorepo",
+  "name": "crud-mail",
   "version": "1.0.0",
-  "private": true,
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
+  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "postinstall": "npm run bootstrap",
-    "bootstrap": "npm --workspace backend install && npm --workspace frontend install",
-    "dev": "concurrently \"npm --workspace backend run dev\" \"npm --workspace frontend run dev\""
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "fastify": "^5.1.0",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "concurrently": "^7.6.0"
-  }
+    "dotenv": "^16.4.7"
+  },
+  "description": ""
 }
