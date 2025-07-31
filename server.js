@@ -555,12 +555,12 @@ server.delete("/produtos/:id", async (request, reply) => {
 
 // Criar um novo produto no estoque
 server.post("/produto", async (request, reply) => {
-  const { nome, quantidade, valor } = request.body;
-  if (!nome || !quantidade || valor == null) {
+  const { nome, quantidade, valor, local } = request.body;
+  if (!nome || !quantidade || valor == null|| !local) {
     return reply.status(400).send({ error: "Nome, quantidade e valor são obrigatórios." });
   }
   try {
-    await database.createProduto({ nome, quantidade, valor });
+    await database.createProduto({ nome, quantidade, valor, local  });
     return reply.status(201).send({ message: "Produto adicionado ao estoque!" });
   } catch (error) {
     console.error(error);

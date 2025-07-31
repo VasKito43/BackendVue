@@ -410,6 +410,7 @@ export class DatabasePostgres {
         u.nome AS usuario_nome,
         p.id   AS produto_id,
         p.nome AS produto_nome,
+        p.local          AS produto_local,
         v.id   AS vendedor_id,
         v.nome AS vendedor_nome,
         c.id   AS cliente_id,
@@ -439,6 +440,7 @@ export class DatabasePostgres {
         u.nome AS usuario_nome,
         p.id   AS produto_id,
         p.nome AS produto_nome,
+        p.local          AS produto_local,
         v.id   AS vendedor_id,
         v.nome AS vendedor_nome,
         c.id   AS cliente_id,
@@ -538,18 +540,20 @@ async createSaida(saida) {
 
   async createProduto(produto) {
   const produtoId = randomUUID();
-  const { nome, quantidade, valor } = produto;
+  const { nome, quantidade, valor, local } = produto;
   await sql`
     INSERT INTO produtos (
       id,
       nome,
       quantidade,
-      valor
+      valor,
+      local
     ) VALUES (
       ${produtoId},
       ${nome},
       ${quantidade},
-      ${valor}
+      ${valor},
+      ${local}
     )
   `;
 }
@@ -613,6 +617,7 @@ async listEntradas(search) {
       p.nome AS produto_nome,
       e.quantidade,
       e.data,
+      p.local,
       e.valor        AS valor,               -- valor unitário
       (e.quantidade * e.valor) AS total_entrada  -- total calculado
     FROM entradas e
