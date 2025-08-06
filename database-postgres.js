@@ -466,11 +466,11 @@ export class DatabasePostgres {
   // --- database.js ---
 async createSaida(saida) {
   return await sql.begin(async (tx) => {
-    const dataHoje = new Date();
     const {
       usuarioId,
       produtoId,
       quantidade,
+      data,
       vendedorId,
       descricao,
       valor_custo,
@@ -509,7 +509,7 @@ async createSaida(saida) {
         ${usuarioId},
         ${produtoId},
         ${quantidade},
-        ${dataHoje},
+        ${data},
         ${vendedorId},
         ${descricao},
         ${valor_custo},
@@ -628,33 +628,157 @@ async listEntradas(search) {
   return rows
 }
 
- async fechamentoCaixa({ date, vendedorId }) {
-    // date no formato YYYY-MM-DD
-    // lucro = SUM(valor_venda - valor_custo) * quantidade
-    const rows = await sql`
-      SELECT 
-        fp.nome             AS forma,
-        SUM(s.valor_venda * s.quantidade)      AS total,
-        SUM((s.valor_venda - s.valor_custo) * s.quantidade) AS lucro
-      FROM saidas s
-      JOIN formas_pagamentos fp ON s.id_forma_pagamento = fp.id
-      WHERE s.data = ${date} 
-        AND s.vendedor_id = ${vendedorId}
-      GROUP BY fp.nome
-    `
-    // soma totalGeral e lucroGeral
-    const totalGeral = rows.reduce((acc, r) => acc + parseFloat(r.total), 0)
-    const lucroGeral = rows.reduce((acc, r) => acc + parseFloat(r.lucro), 0)
-    // converte para objeto { forma: { total, lucro } }
-    const porForma = {}
-    for (const r of rows) {
-      porForma[r.forma] = {
-        total: parseFloat(r.total),
-        lucro: parseFloat(r.lucro)
-      }
-    }
-    return { valoresPorForma: porForma, totalGeral, lucroGeral }
+ // Função de acesso ao banco
+// database-postgres.js (ou onde estiver seu método)
+async fechamentoCaixa({ periodType, periodValue, vendedorId }) {
+  // 1) Garante que os parâmetros estejam corretos
+  if (!['day','month','year'].includes(periodType)) {
+    throw new Error(`periodType inválido: ${periodType}`)
   }
+  if (typeof periodValue !== 'string' || !periodValue) {
+    throw new Error('periodValue deve ser uma string não vazia')
+  }
+
+  // 2) Monta o filtro de data dinamicamente
+  let dateFilter
+  if (periodType === 'day') {
+    dateFilter = sql`s.data = ${periodValue}`
+  } else if (periodType === 'month') {
+    dateFilter = sql`to_char(s.data, 'YYYY-MM') = ${periodValue}`
+  } else { // year
+    dateFilter = sql`to_char(s.data, 'YYYY') = ${periodValue}`
+  }
+
+  // 3) Executa a query usando o dateFilter
+  const rows = await sql`
+    SELECT
+      fp.nome AS forma,
+      SUM(s.valor_venda * s.quantidade)                AS total,
+      SUM((s.valor_venda - s.valor_custo) * s.quantidade) AS lucro
+    FROM saidas s
+    JOIN formas_pagamentos fp ON s.id_forma_pagamento = fp.id
+    WHERE ${dateFilter}
+      AND s.vendedor_id = ${vendedorId}
+    GROUP BY fp.nome
+  `
+
+  // 4) Acumula totais gerais
+  const totalGeral = rows.reduce((sum, r) => sum + parseFloat(r.total), 0)
+  const lucroGeral = rows.reduce((sum, r) => sum + parseFloat(r.lucro), 0)
+
+  // 5) Converte para objeto { forma: { total, lucro } }
+  const valoresPorForma = {}
+  for (const r of rows) {
+    valoresPorForma[r.forma] = {
+      total: parseFloat(r.total),
+      lucro: parseFloat(r.lucro),
+    }
+  }
+
+  return { valoresPorForma, totalGeral, lucroGeral }
+}
+
+
+// dentro de class DatabasePostgres
+
+async atualizarEstoque({ produtoId_antigo, produtoId_novo, quantidade_antiga, quantidade_nova }) {
+  return await sql.begin(async tx => {
+    if (produtoId_antigo !== produtoId_novo) {
+      // repõe do antigo e debita no novo
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade + ${quantidade_antiga}
+        WHERE id = ${produtoId_antigo}
+      `
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade - ${quantidade_nova}
+        WHERE id = ${produtoId_novo}
+      `
+    } else {
+      // mesma linha, ajusta pela diferença
+      const diff = quantidade_nova - quantidade_antiga
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade - ${diff}
+        WHERE id = ${produtoId_novo}
+      `
+    }
+  })
+}
+
+async atualizarSaida({ idSaida, produtoId, quantidade, valor_custo, valor_venda, data, id_forma_pagamento }) {
+  // aqui não precisa de tx, basta executar o UPDATE
+  return await sql`
+    UPDATE saidas SET
+      produto_id         = ${produtoId},
+      quantidade         = ${quantidade},
+      valor_custo        = ${valor_custo},
+      valor_venda        = ${valor_venda},
+      data               = ${data},
+      id_forma_pagamento = ${id_forma_pagamento}
+    WHERE id = ${idSaida}
+  `
+}
+
+
+// em database-postgres.js
+
+// database-postgres.js
+
+
+async atualizarSaidaComEstoque(opts) {
+  return await sql.begin(async tx => {
+    const {
+      idSaida,
+      produtoId_antigo,
+      produtoId_novo,
+      quantidade_antiga,
+      quantidade_nova,
+      valor_custo,
+      valor_venda,
+      data,
+      id_forma_pagamento
+    } = opts;
+
+    // 1) REPOR antigo / DEBITAR novo
+    if (produtoId_antigo !== produtoId_novo) {
+      // repor quantidade antiga
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade + ${quantidade_antiga}
+        WHERE id = ${produtoId_antigo}
+      `;
+      // debitar nova quantidade
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade - ${quantidade_nova}
+        WHERE id = ${produtoId_novo}
+      `;
+    } else {
+      // mesmo produto, ajusta pela diferença
+      const diff = quantidade_nova - quantidade_antiga;
+      await tx`
+        UPDATE produtos
+        SET quantidade = quantidade - ${diff}
+        WHERE id = ${produtoId_novo}
+      `;
+    }
+
+    // 2) AGORA atualiza a própria saída (FK para produtos.id já existe)
+    await tx`
+      UPDATE saidas
+      SET
+        produto_id          = ${produtoId_novo},
+        quantidade          = ${quantidade_nova},
+        valor_custo         = ${valor_custo},
+        valor_venda         = ${valor_venda},
+        data                = ${data},
+        id_forma_pagamento  = ${id_forma_pagamento}
+      WHERE id = ${idSaida}
+    `;
+  });
+}
 
 
 

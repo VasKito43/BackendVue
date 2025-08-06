@@ -470,6 +470,7 @@ server.post("/realizarSaida", async (request, reply) => {
     usuarioId,
     produtoId,
     quantidade,
+    data,
     vendedorId,
     descricao,
     valor_custo,
@@ -483,6 +484,7 @@ server.post("/realizarSaida", async (request, reply) => {
     usuarioId == null ||
     produtoId == null ||
     quantidade == null ||
+    !data || 
     vendedorId == null ||
     valor_custo == null ||
     valor_venda == null ||
@@ -499,6 +501,7 @@ server.post("/realizarSaida", async (request, reply) => {
       usuarioId,
       produtoId,
       quantidade,
+      data,
       vendedorId,
       descricao,
       valor_custo,
@@ -631,21 +634,69 @@ server.get('/lucros', async (request, reply) => {
 // abaixo das outras rotas, antes do server.listen:
 // em server.js, logo após as outras rotas...
 // Fechamento de caixa
+// Rota HTTP
+// server.js (ou onde você registra suas rotas)
 server.get('/fechamento', async (request, reply) => {
-  const { date, vendedor } = request.query
-  if (!date || !vendedor) {
-    return reply.status(400).send({ error: 'Parâmetros "date" e "vendedor" são obrigatórios.' })
-  }
+   const { periodType, periodValue, vendedor } = request.query
+   if (!periodType || !periodValue || !vendedor) {
+     return reply
+       .status(400)
+       .send({ error: 'Parâmetros "periodType", "periodValue" e "vendedor" são obrigatórios.' })
+   }
+
   try {
     const resultado = await database.fechamentoCaixa({
-      date,
+      periodType,    // 'day' | 'month' | 'year'
+      periodValue,   // ex: '2025-08-04' ou '2025-08' ou '2025'
       vendedorId: vendedor
     })
     return reply.send(resultado)
   } catch (err) {
     console.error(err)
-    return reply.status(500).send({ error: 'Erro ao calcular fechamento de caixa.' })
+    return reply
+      .status(500)
+      .send({ error: 'Erro ao calcular fechamento de caixa.' })
   }
 })
 
+// PUT /atualizarSaida/:id
+server.put('/atualizarSaida/:id', async (request, reply) => {
+  const idSaida = request.params.id;
+  const body    = request.body;
 
+  // validações básicas
+  if (
+    !body.produtoId_antigo ||
+    !body.produtoId_novo   ||
+    body.quantidade_antiga == null ||
+    body.quantidade_nova   == null ||
+    body.valor_custo       == null ||
+    body.valor_venda       == null ||
+    !body.data ||
+    !body.id_forma_pagamento
+  ) {
+    return reply.status(400).send({ error: 'Campos obrigatórios faltando.' });
+  }
+
+  try {
+    await database.atualizarSaidaComEstoque({
+      idSaida,
+      produtoId_antigo:   body.produtoId_antigo,
+      produtoId_novo:     body.produtoId_novo,
+      quantidade_antiga:  body.quantidade_antiga,
+      quantidade_nova:    body.quantidade_nova,
+      valor_custo:        body.valor_custo,
+      valor_venda:        body.valor_venda,
+      data:               body.data,
+      id_forma_pagamento: body.id_forma_pagamento
+    });
+    return reply.send({ message: 'Saída atualizada com sucesso!' });
+  } catch (err) {
+    console.error('Erro ao atualizar saída:', err);
+    // Se quiser dar feedback mais fino:
+    if (err.code === '23503') {
+      return reply.status(400).send({ error: 'Produto não existe no estoque.' });
+    }
+    return reply.status(500).send({ error: 'Erro interno no servidor.' });
+  }
+});
